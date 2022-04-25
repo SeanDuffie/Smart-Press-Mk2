@@ -11,6 +11,7 @@
 #define COLOR #800000 // Item Color
 #define TEXT #FFFFFF // Text Color
 
+#define RES false // Determine whether to reset stored credentials or not
 #define DEBUG true // Toggle this to enable/disable serial prints on TX/GPIO1
 #if DEBUG == true
 #define debug(x) Serial.print(x)
@@ -25,9 +26,6 @@ WiFiManager wm;
 WiFiServer server(80); // Create an instance of the server on port 80
 
 String header; // Variable to store the HTTP request
-
-// TODO: Section to store variables for handling webpage logic
-bool res = false; // Variable to determine whether to reset stored credentials or not
 
 // Auxiliar variables to store the current output state
 String output0State = "OFF";
@@ -45,6 +43,7 @@ void setup() {
 //  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   Serial.begin(115200);
 //  Serial.setDebugOutput(true);
+  wm.setDebugOutput(false);                 // Comment out to enable Debug
 
   debugln("\n--------------------------------");
   debugln("** Starting...");
@@ -58,8 +57,7 @@ void setup() {
   
   wm.setConfigPortalTimeout(120);           // How long to wait in Config Mode
   wm.setConnectTimeout(20);                 // How long to try to connect
-  wm.setClass("invert");                    // Dark Theme
-  wm.setDebugOutput(false);                 // Comment out to enable Debug
+  wm.setClass("invert");                    // Dark Theme for config mode
   
   if (!wm.autoConnect("AutoConnectAP")) {   // Handles AutoConnect Failures
     debugln("** Failed to connect or hit timeout");
@@ -71,25 +69,23 @@ void setup() {
 
   // Initialize the output variables as outputs
   pinMode(output0, OUTPUT);
-//  pinMode(output1, OUTPUT);
+  pinMode(output1, OUTPUT);
   pinMode(output2, OUTPUT);
   pinMode(output3, OUTPUT);
   // Set outputs to LOW
   digitalWrite(output0, LOW);
-//  digitalWrite(output1, LOW);
+  digitalWrite(output1, LOW);
   digitalWrite(output2, LOW);
   digitalWrite(output3, LOW);
 
   server.begin(); // Start the server
-  debug("** Local IP: ");
-  debugln(WiFi.localIP());    // Print the IP address
+  debugln("** Local IP: " + WiFi.localIP());    // Print the IP address
   debugln("** Setup Complete!");
   debugln("--------------------------------");
 }
 
 void loop() {
-  // Check if a client has connected
-  WiFiClient client = server.available();
+  WiFiClient client = server.available(); // Check if a client has connected
   if (client) {                           // Only runs if the client is connected
     debugln("\n================================");
     debugln("* New Client.");
@@ -111,33 +107,45 @@ void loop() {
         }
       }
     }
-    // Clear the header variable
-    header = "";
-    // Close the connection
-    client.stop();
+    header = ""; // Clear the header variable
+    client.stop(); // Close the connection
     debugln("* Client disconnected.");
     debugln("================================");
   }
-  if (res) {wm.resetSettings();}
+  if (RES) {wm.resetSettings();}
 }
   
 // Config Mode Function, Starts AP for configuring 
 void configModeCallback(WiFiManager *myWiFiManager) {
+  /*
+  * This Function is called whenever no existing connection is found
+  * 
+  */
   debugln("Entered config mode");
   debugln(WiFi.softAPIP());
 
   debugln(myWiFiManager->getConfigPortalSSID());
 }
 
-// Reads HTTP request from client
 void receiveRequest(WiFiClient client) {
+    /*
+    * Reads HTTP Request from Client (one line per call)
+    */
     char c = client.read();             // read a byte, then
     Serial.write(c);                    // print it out the serial monitor
     header += c;
 }
 
-// Update Pins based on Request
 void updatePins(WiFiManager client) {
+    /*
+    * Updates the GPIO pins based on each line of the HTTP Request
+    * 
+    * TODO: This function will eventually contain the logic to decide what happens to the pins
+    * TODO: Add a timer for a pin to switch off a specified amount of time after it was turned on
+    * TODO: Specify which pins are connected to what (on button, off button, buzzer, etc.)
+    * TODO: Test
+    */
+
     // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
     // and a content-type so the client knows what's coming, then a blank line:
     client.println("HTTP/1.1 200 OK");
@@ -183,6 +191,14 @@ void updatePins(WiFiManager client) {
 
 // Respond to the client with the Webpage
 void displayWebpage(WiFiManager client) {
+    /*
+    * Generates a webpage using HTML and sends it to the HTTP Client
+    * 
+    * TODO: Specify which pins are connected to what (on button, off button, buzzer, etc.)
+    * TODO: 
+    * TODO: Test
+    */
+
     // HTML Header
     client.println("<!DOCTYPE html><html>");
     client.println("<head>");
