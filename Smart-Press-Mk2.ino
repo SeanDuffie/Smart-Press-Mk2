@@ -7,9 +7,9 @@
 #include <ESP8266WiFi.h> // Used to get MAC Address
 
 #define APP "Coffee Maker" // Name of Attached Device
-#define BACK #000000 // Background Color
-#define COLOR #800000 // Item Color
-#define TEXT #FFFFFF // Text Color
+#define BACK "#000000" // Background Color
+#define COLOR "#800000" // Item Color
+#define TEXT "#FFFFFF" // Text Color
 
 #define RES false // Determine whether to reset stored credentials or not
 #define DEBUG true // Toggle this to enable/disable serial prints on TX/GPIO1
@@ -47,7 +47,8 @@ void setup() {
 
   debugln("\n--------------------------------");
   debugln("** Starting...");
-  debugln("** Device MAC Address: " + WiFi.macAddress());
+  debug("** Device MAC Address: ");
+  debugln(WiFi.macAddress());
 
   wm.setAPCallback(configModeCallback);     // Callback Function to Config Mode
 
@@ -79,7 +80,8 @@ void setup() {
   digitalWrite(output3, LOW);
 
   server.begin(); // Start the server
-  debugln("** Local IP: " + WiFi.localIP());    // Print the IP address
+  debug("** Local IP: ");
+  debugln(WiFi.localIP());    // Print the IP address
   debugln("** Setup Complete!");
   debugln("--------------------------------");
 }
@@ -92,7 +94,8 @@ void loop() {
     String currentLine = "";                // make a String to hold incoming data from the client
     while (client.connected()) {            // loop while the client's connected
       if (client.available()) {                 // if there's bytes to read from the client,
-        receiveRequest(client);
+        char c = client.read();             // Receive byte from request
+        header += c;
         if (c == '\n') {                            // if the byte is a newline character
           // two newline characters in a row means end of the client HTTP request
           if (currentLine.length() == 0) {              // so send a response:
@@ -127,16 +130,7 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   debugln(myWiFiManager->getConfigPortalSSID());
 }
 
-void receiveRequest(WiFiClient client) {
-    /*
-    * Reads HTTP Request from Client (one line per call)
-    */
-    char c = client.read();             // read a byte, then
-    Serial.write(c);                    // print it out the serial monitor
-    header += c;
-}
-
-void updatePins(WiFiManager client) {
+void updatePins(WiFiClient client) {
     /*
     * Updates the GPIO pins based on each line of the HTTP Request
     * 
@@ -190,7 +184,7 @@ void updatePins(WiFiManager client) {
 }
 
 // Respond to the client with the Webpage
-void displayWebpage(WiFiManager client) {
+void displayWebpage(WiFiClient client) {
     /*
     * Generates a webpage using HTML and sends it to the HTTP Client
     * 
@@ -202,14 +196,24 @@ void displayWebpage(WiFiManager client) {
     // HTML Header
     client.println("<!DOCTYPE html><html>");
     client.println("<head>");
-    client.println("<title>Smart-Press | " + APP + "</title>");
+    client.print("<title>Smart-Press | ");
+    client.print(APP);
+    client.println("</title>");
     client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
     client.println("<link rel=\"icon\" href=\"data:,\">");
     
     // CSS style section
-    client.println("<style>html { font-family: Helvetica; color: " + TEXT + "; display: inline-block; margin: 0px auto; text-align: center; }");
-    client.println(".bg { background-color: " + BACK + "; }");
-    client.println(".button1 { background-color: " + COLOR + "; border: none; color: " + TEXT + "; padding: 16px 40px; ");
+    client.print("<style>html { font-family: Helvetica; color: ");
+    client.print(TEXT);
+    client.println("; display: inline-block; margin: 0px auto; text-align: center; }");
+    client.print(".bg { background-color: "
+    client.print(BACK);
+    client.println("; }");
+    client.print(".button1 { background-color: ");
+    client.print(COLOR);
+    client.print("; border: none; color: "
+    client.print(TEXT)
+    client.println("; padding: 16px 40px; ");
     client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer; }");
     client.println(".button0 { background-color: " + TEXT + "; border: none; color: " + COLOR + "; padding: 16px 40px; }</style>");
 
