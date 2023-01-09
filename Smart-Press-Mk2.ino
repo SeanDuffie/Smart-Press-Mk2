@@ -4,7 +4,7 @@
  * If none are found and successfully connected, a wireless AP will be created for configuration
  */
 #include <WiFiManager.h>
-#include <ESP8266WiFi.h> // Used to get MAC Address
+//#include <ESP8266WiFi.h> // Used to get MAC Address
 
 #define APP "Coffee Maker" // Name of Attached Device
 #define BACK "#000000" // Background Color
@@ -35,13 +35,13 @@ String output3State = "OFF";
 
 // Assign output variables to GPIO pins
 const int output0 = 0;
-const int output1 = 1;
-const int output2 = 2;
-const int output3 = 3;
+const int output1 = 2;
+const int output2 = 4;
+const int output3 = 5;
 
 void setup() {
-//  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   Serial.begin(115200);
+  WiFi.mode(WIFI_MODE_STA); // explicitly set mode, esp defaults to STA+AP
 //  Serial.setDebugOutput(true);
   wm.setDebugOutput(false);                 // Comment out to enable Debug
 
@@ -206,16 +206,20 @@ void displayWebpage(WiFiClient client) {
     client.print("<style>html { font-family: Helvetica; color: ");
     client.print(TEXT);
     client.println("; display: inline-block; margin: 0px auto; text-align: center; }");
-    client.print(".bg { background-color: "
+    client.print(".bg { background-color: ");
     client.print(BACK);
     client.println("; }");
     client.print(".button1 { background-color: ");
     client.print(COLOR);
-    client.print("; border: none; color: "
-    client.print(TEXT)
+    client.print("; border: none; color: ");
+    client.print(TEXT);
     client.println("; padding: 16px 40px; ");
     client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer; }");
-    client.println(".button0 { background-color: " + TEXT + "; border: none; color: " + COLOR + "; padding: 16px 40px; }</style>");
+    client.print(".button0 { background-color: ");
+    client.print(TEXT);
+    client.print("; border: none; color: ");
+    client.print(COLOR);
+    client.println("; padding: 16px 40px; }</style>");
 
     // Auto Refresh Option
     client.println("<meta http-equiv=\"refresh\" content=\"20\"></head>");
@@ -224,7 +228,9 @@ void displayWebpage(WiFiClient client) {
     client.println("<body class=\"bg\"><h1>ESP8266 Web Server</h1>");
     
     // Display current state, and ON/OFF buttons for GPIO 3  
-    client.println("<p>GPIO 3 - Currently " + output3State + "</p>");
+    client.print("<p>GPIO 3 - Currently ");
+    client.print(output3State);
+    client.println("</p>");
     // TODO: Do I want it like this??? If the output3State is OFF, it displays the ON button
     if (output3State=="OFF") {
         client.println("<p><a href=\"/3/ON\"><button class=\"button1\">ON</button></a></p>");
@@ -241,14 +247,14 @@ void displayWebpage(WiFiClient client) {
         client.println("<p><a href=\"/2/OFF\"><button class=\"button0\">OFF</button></a></p>");
     } 
     
-    // // Display current state, and ON/OFF buttons for GPIO 1
-    // client.println("<p>GPIO 1 - State " + output1State + "</p>");
-    // // TODO: Do I want it like this??? If the output1State is OFF, it displays the ON button
-    // if (output1State=="OFF") {
-    //     client.println("<p><a href=\"/1/ON\"><button class=\"button1\">ON</button></a></p>");
-    // } else {
-    //     client.println("<p><a href=\"/1/OFF\"><button class=\"button0\">OFF</button></a></p>");
-    // } 
+     // Display current state, and ON/OFF buttons for GPIO 1
+     client.println("<p>GPIO 1 - State " + output1State + "</p>");
+     // TODO: Do I want it like this??? If the output1State is OFF, it displays the ON button
+     if (output1State=="OFF") {
+         client.println("<p><a href=\"/1/ON\"><button class=\"button1\">ON</button></a></p>");
+     } else {
+         client.println("<p><a href=\"/1/OFF\"><button class=\"button0\">OFF</button></a></p>");
+     } 
     
     // Display current state, and ON/OFF buttons for GPIO 0
     client.println("<p>GPIO 0 - Currently " + output0State + "</p>");
