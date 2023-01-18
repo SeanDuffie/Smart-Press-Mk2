@@ -4,14 +4,12 @@
  * If none are found and successfully connected, a wireless AP will be created for configuration
  */
 #include <WiFiManager.h>
-//#include <ESP8266WiFi.h> // Used to get MAC Address
+//#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
+#include <Update.h>
 
-#define APP "Coffee Maker" // Name of Attached Device
-#define BACK "#000000" // Background Color
-#define COLOR "#800000" // Item Color
-#define TEXT "#FFFFFF" // Text Color
-
-#define RES false // Determine whether to reset stored credentials or not
 #define DEBUG true // Toggle this to enable/disable serial prints on TX/GPIO1
 #if DEBUG == true
 #define debug(x) Serial.print(x)
@@ -23,9 +21,104 @@
 
 WiFiManager wm;
 
-WiFiServer server(80); // Create an instance of the server on port 80
+WiFiServer server(80); // Create an instance of the wifiserver on port 80
+
+const char* host = "Smart Node AP";
+bool RST = false; // Determine whether to reset stored credentials or not
+String APP = "Coffee Maker"; // Name of Attached Device
+String BACK = "#000000"; // Background Color
+String COLOR = "#800000"; // Item Color
+String TEXT = "#FFFFFF"; // Text Color
 
 String header; // Variable to store the HTTP request
+
+/* CSS Style String */
+String style =
+"<style>"
+"    #file-input,input{width:100%;height:44px;border-radius:4px;margin:10px auto;font-size:15px}"
+"    input{background:#f1f1f1;border:0;padding:0 15px}body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}"
+"        #file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}"
+"        #bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0%;height:10px}"
+"    form{background:#fff;max-width:258px;margin:75px auto;padding:30px;border-radius:5px;text-align:center}"
+"    .btn{background:#3498db;color:#fff;cursor:pointer}"
+"</style>";
+
+/* HTML Login Page String */
+String loginIndex = 
+"<form name=loginForm>"
+"    <h1>ESP32 Login</h1>"
+"    <input name=userid placeholder='User ID'> "
+"    <input name=pwd placeholder=Password type=Password>"
+"    <input type=submit onclick=check(this.form) class=btn value=Login>"
+"</form>"
+"<script>"
+"    function check(form) {"
+"        if(form.userid.value=='admin' && form.pwd.value=='admin')"
+"            {window.open('/serverIndex')}"
+"        else"
+"            {alert('Error Password or Username')}"
+"    }"
+"</script>" + style;
+ 
+/* Server Index Page String */
+String serverIndex = 
+"<script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>"
+"<form method='POST' action='#' enctype='multipart/form-data' id='upload_form'>"
+"    <input type='file' name='update' id='file' onchange='sub(this)' style=display:none>"
+"    <label id='file-input' for='file'>   Choose file...</label>"
+"    <input type='submit' class=btn value='Update'>"
+"    <br><br>"
+"    <div id='prg'></div>"
+"    <br><div id='prgbar'><div id='bar'></div></div><br>"
+"</form>"
+"<script>"
+"    function sub(obj){"
+"        var fileName = obj.value.split('\\\\');"
+"        document.getElementById('file-input').innerHTML = '   '+ fileName[fileName.length-1];"
+"    };"
+"    $('form').submit(function(e){"
+"        e.preventDefault();"
+"        var form = $('#upload_form')[0];"
+"        var data = new FormData(form);"
+"        $.ajax({"
+"            url: '/update',"
+"            type: 'POST',"
+"            data: data,"
+"            contentType: false,"
+"            processData:false,"
+"            xhr: function() {"
+"                var xhr = new window.XMLHttpRequest();"
+"                xhr.upload.addEventListener('progress', function(evt) {"
+"                    if (evt.lengthComputable) {"
+"                        var per = evt.loaded / evt.total;"
+"                        $('#prg').html('progress: ' + Math.round(per*100) + '%');"
+"                        $('#bar').css('width',Math.round(per*100) + '%');"
+"                    }"
+"                }, false);"
+"                return xhr;"
+"            },"
+"            success:function(d, s) {"
+"                console.log('success!')"
+"            },"
+"            error: function (a, b, c) {}"
+"        });"
+"    });"
+"</script>" + style;
+
+String buttonHead =
+"<!DOCTYPE html><html>"
+"    <head>"
+"        <title>Smart-Press | " + APP + "</title>"
+"        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+"        <link rel=\"icon\" href=\"data:,\">"
+"        <style>html { font-family: Helvetica; color: " + TEXT + "; display: inline-block; margin: 0px auto; text-align: center; }"
+"            .bg { background-color: " + BACK + "; }"
+"            .ON { background-color: " + COLOR + "; border: none; color: " + TEXT + "; padding: 16px 32px; text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer; }"
+"            .OFF { background-color: " + TEXT + "; border: none; color: " + COLOR + "; padding: 16px 40px; }"
+"            text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer; }"
+"        </style>"
+"    <meta http-equiv=\"refresh\" content=\"20\"></head>"
+"    <body class=\"bg\"><h1>ESP8266 Web Server</h1>\n";
 
 // Auxiliar variables to store the current output state
 String output0State = "OFF";
@@ -42,16 +135,15 @@ const int output3 = 25;
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_MODE_STA); // explicitly set mode, esp defaults to STA+AP
-//  Serial.setDebugOutput(true);
-  wm.setDebugOutput(false);                 // Comment out to enable Debug
 
   debugln("\n================================");
   debugln("** Starting...");
   debug("** Device MAC Address: ");
   debugln(WiFi.macAddress());
 
+  /************************************  Start WiFi Manager  *************************************/
+  wm.setDebugOutput(false);                 // Comment out to enable Debug
   wm.setAPCallback(configModeCallback);     // Callback Function to Config Mode
-
   // Set Static IP and Config Portal IP Addresses manually
   wm.setSTAStaticIPConfig(IPAddress(192,168,0,177), IPAddress(192,168,0,1), IPAddress(255,255,255,0));
   wm.setAPStaticIPConfig(IPAddress(10,0,1,1), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
@@ -67,7 +159,9 @@ void setup() {
     delay(3000);
     ESP.restart();
   }
+  /************************************   End WiFi Manager   *************************************/
 
+  /************************************   Start Pin Setup    *************************************/
   // Initialize the output variables as outputs
   pinMode(output0, OUTPUT);
   pinMode(output1, OUTPUT);
@@ -78,6 +172,7 @@ void setup() {
   digitalWrite(output1, LOW);
   digitalWrite(output2, LOW);
   digitalWrite(output3, LOW);
+  /************************************    End Pin Setup     *************************************/
 
   server.begin(); // Start the server
   debug("** Local IP: ");
@@ -102,8 +197,6 @@ void loop() {
           // two newline characters in a row means end of the client HTTP request
           if (currentLine.length() == 0) {              // so send a response:
             updatePins(client);
-            // displayWebpage(client);
-            // getPin(client);
             break;
           } else {                                  // if you got a newline, then clear currentLine
             currentLine = "";
@@ -117,7 +210,7 @@ void loop() {
     client.stop(); // Close the connection
     debugln("--------------------------------");
   }
-  if (RES) {wm.resetSettings();}
+  if (RST) {wm.resetSettings();}
 }
   
 // Config Mode Function, Starts AP for configuring 
@@ -126,12 +219,16 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   * This Function is called whenever no existing connection is found
   * 
   */
-  debugln("Entered config mode");
-  debugln(WiFi.softAPIP());
+  debugln("*** Entered config mode");
+  
+//  debug("*** AP IP: ");
+//  debugln(WiFi.softAPIP());
 
+  debug("*** AP SSID: ");
   debugln(myWiFiManager->getConfigPortalSSID());
 }
 
+// Updates the status of the pins locally
 void updatePins(WiFiClient client) {
     /*
     * Updates the GPIO pins based on each line of the HTTP Request
@@ -224,110 +321,59 @@ void updatePins(WiFiClient client) {
         debugln(output0State);
         client.println(output0State);
         client.println();
+    } else if (header.indexOf("RST") >= 0) {
+        client.println("RESETTING...");
+        client.println();
+        RST = true;
     } else {
         debugln("Error with header input");
         client.println("Error with header input");
+        client.println();
     }
 }
 
-// // Respond to the client with the Webpage
-// void displayWebpage(WiFiClient client) {
-//     /*
-//     * Generates a webpage using HTML and sends it to the HTTP Client
-//     * 
-//     * TODO: Specify which pins are connected to what (on button, off button, buzzer, etc.)
-//     * TODO: 
-//     * TODO: Test
-//     */
+// Respond to the client with the Webpage
+void displayWebpage(WiFiClient client) {
+    /*
+    * Generates a webpage using HTML and sends it to the HTTP Client
+    * 
+    * TODO: Specify which pins are connected to what (on button, off button, buzzer, etc.)
+    * TODO: 
+    * TODO: Test
+    */
 
-//     // HTML Header
-//     client.println("<!DOCTYPE html><html>");
-//     client.println("<head>");
-//     client.print("<title>Smart-Press | ");
-//     client.print(APP);
-//     client.println("</title>");
-//     client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-//     client.println("<link rel=\"icon\" href=\"data:,\">");
-    
-//     // CSS style section
-//     client.print("<style>html { font-family: Helvetica; color: ");
-//     client.print(TEXT);
-//     client.println("; display: inline-block; margin: 0px auto; text-align: center; }");
-//     client.print(".bg { background-color: ");
-//     client.print(BACK);
-//     client.println("; }");
+    // Display current state, and ON/OFF buttons for GPIO 3
+    String buttonIndex = buttonHead + "<p>GPIO " + output3 + " - Currently " + output3State + "</p>";
+    if (output3State=="OFF") {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/25/ON\"><button class=\"ON\">ON</button></a></p>\n";
+    } else {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/25/OFF\"><button class=\"OFF\">OFF</button></a></p>\n";
+    }
 
-//     client.print(".ON { background-color: ");
-//     client.print(COLOR);
-//     client.print("; border: none; color: ");
-//     client.print(TEXT);
-//     client.println("; padding: 16px 32px; ");
-//     client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer; }");
+    // Display current state, and ON/OFF buttons for GPIO 2
+    buttonIndex = buttonIndex + "<p>GPIO " + output2 + " - Currently " + output2State + "</p>";
+    if (output2State=="OFF") {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/33/ON\"><button class=\"ON\">ON</button></a></p>\n";
+    } else {
+        buttonIndex = buttonIndex + "%s\t<p><a href=\"/33/OFF\"><button class=\"OFF\">OFF</button></a></p>\n";
+    }
 
-//     client.print(".OFF { background-color: ");
-//     client.print(TEXT);
-//     client.print("; border: none; color: ");
-//     client.print(COLOR);
-//     client.println("; padding: 16px 40px; }");
-//     client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer; }</style>");
+    // Display current state, and ON/OFF buttons for GPIO 1
+    buttonIndex = buttonIndex + "<p>GPIO " + output1 + " - Currently " + output1State + "</p>";
+    if (output1State=="OFF") {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/32/ON\"><button class=\"ON\">ON</button></a></p>\n";
+    } else {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/32/OFF\"><button class=\"OFF\">OFF</button></a></p>\n";
+    }
 
-//     // Auto Refresh Option
-//     client.println("<meta http-equiv=\"refresh\" content=\"20\"></head>");
+    // Display current state, and ON/OFF buttons for GPIO 0
+    buttonIndex = buttonIndex + "<p>GPIO " + output0 + " - Currently " + output0State + "</p>";
+    if (output0State=="OFF") {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/5/ON\"><button class=\"ON\">ON</button></a></p>\n";
+    } else {
+        buttonIndex = buttonIndex + "\t<p><a href=\"/5/OFF\"><button class=\"OFF\">OFF</button></a></p>\n";
+    }
+    buttonIndex = buttonIndex + "</body></html>\n";
 
-//     // Begin Body
-//     client.println("<body class=\"bg\"><h1>ESP8266 Web Server</h1>");
-
-//     // Display current state, and ON/OFF buttons for GPIO 3
-//     client.print("<p>GPIO ");
-//     client.print(output3);
-//     client.print(" - Currently ");
-//     client.print(output3State);
-//     client.println("</p>");
-//     // TODO: Do I want it like this??? If the output3State is OFF, it displays the ON button
-//     if (output3State=="OFF") {
-//         client.println("<p><a href=\"/25/ON\"><button class=\"ON\">ON</button></a></p>");
-//     } else {
-//         client.println("<p><a href=\"/25/OFF\"><button class=\"OFF\">OFF</button></a></p>");
-//     }
-
-//     // Display current state, and ON/OFF buttons for GPIO 2
-//     client.print("<p>GPIO ");
-//     client.print(output2);
-//     client.print(" - Currently ");
-//     client.print(output2State);
-//     client.println("</p>");
-//     if (output2State=="OFF") {
-//         client.println("<p><a href=\"/33/ON\"><button class=\"ON\">ON</button></a></p>");
-//     } else {
-//         client.println("<p><a href=\"/33/OFF\"><button class=\"OFF\">OFF</button></a></p>");
-//     }
-    
-//      // Display current state, and ON/OFF buttons for GPIO 1
-//     client.print("<p>GPIO ");
-//     client.print(output1);
-//     client.print(" - Currently ");
-//     client.print(output1State);
-//     client.println("</p>");
-//      if (output1State=="OFF") {
-//          client.println("<p><a href=\"/32/ON\"><button class=\"ON\">ON</button></a></p>");
-//      } else {
-//          client.println("<p><a href=\"/32/OFF\"><button class=\"OFF\">OFF</button></a></p>");
-//      }
-    
-//     // Display current state, and ON/OFF buttons for GPIO 0
-//     client.print("<p>GPIO ");
-//     client.print(output0);
-//     client.print(" - Currently ");
-//     client.print(output0State);
-//     client.println("</p>");
-//     // TODO: Do I want it like this??? If the output0State is OFF, it displays the ON button
-//     if (output0State=="OFF") {
-//         client.println("<p><a href=\"/5/ON\"><button class=\"ON\">ON</button></a></p>");
-//     } else {
-//         client.println("<p><a href=\"/5/OFF\"><button class=\"OFF\">OFF</button></a></p>");
-//     } 
-//     client.println("</body></html>");
-    
-//     // The HTTP response ends with another blank line
-//     client.println();
-// }
+    client.println(buttonIndex);
+}
